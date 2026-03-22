@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CITIES, TOPICS } from './cities.js';
 
 // ── Scene setup ──────────────────────────────────────────────────────
 const scene = new THREE.Scene();
@@ -17,7 +18,7 @@ controls.dampingFactor = 0.05;
 controls.minDistance = 1.8;
 controls.maxDistance = 6;
 controls.autoRotate = true;
-controls.autoRotateSpeed = 0.4;
+controls.autoRotateSpeed = 0.3;
 controls.enablePan = false;
 
 window.addEventListener('resize', () => {
@@ -76,16 +77,13 @@ const atmosGeo = new THREE.SphereGeometry(1.02, 64, 64);
 const atmosMat = new THREE.ShaderMaterial({
   vertexShader: `
     varying vec3 vNormal;
-    varying vec3 vPosition;
     void main() {
       vNormal = normalize(normalMatrix * normal);
-      vPosition = (modelViewMatrix * vec4(position, 1.0)).xyz;
       gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
     }
   `,
   fragmentShader: `
     varying vec3 vNormal;
-    varying vec3 vPosition;
     void main() {
       float intensity = pow(0.65 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.5);
       gl_FragColor = vec4(0.3, 0.6, 1.0, intensity * 0.6);
@@ -106,27 +104,7 @@ for (let i = 0; i < starVerts.length; i++) {
 starGeo.setAttribute('position', new THREE.BufferAttribute(starVerts, 3));
 scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.08 })));
 
-// ── Idea waves ───────────────────────────────────────────────────────
-const IDEA_TOPICS = [
-  { text: 'Iran War', color: '#ff4444', lat: 32, lon: 53 },
-  { text: 'Healthcare', color: '#44ddff', lat: 39, lon: -98 },
-  { text: 'Artificial Intelligence', color: '#aa66ff', lat: 37, lon: -122 },
-  { text: 'Climate Change', color: '#44ff88', lat: 48, lon: 2 },
-  { text: 'Cost of Living', color: '#ffaa33', lat: 51, lon: -0.1 },
-  { text: 'Immigration', color: '#ff6699', lat: 30, lon: -97 },
-  { text: 'Cryptocurrency', color: '#ffdd44', lat: 1, lon: 103 },
-  { text: 'Mental Health', color: '#66bbff', lat: 43, lon: -79 },
-  { text: 'Election Politics', color: '#ff5577', lat: 38, lon: -77 },
-  { text: 'Space Exploration', color: '#8899ff', lat: 28, lon: -80 },
-  { text: 'Misinformation', color: '#ff8844', lat: 35, lon: 139 },
-  { text: 'Renewable Energy', color: '#33ff99', lat: 55, lon: 12 },
-  { text: 'Student Debt', color: '#ddaa55', lat: 42, lon: -71 },
-  { text: 'Global Trade', color: '#55ccdd', lat: 31, lon: 121 },
-  { text: 'Nuclear Threat', color: '#ff3333', lat: 39, lon: 125 },
-  { text: 'Water Crisis', color: '#3399ff', lat: 20, lon: 78 },
-];
-
-// Convert lat/lon to 3D position on sphere
+// ── Helpers ──────────────────────────────────────────────────────────
 function latLonToVec3(lat, lon, radius = 1.005) {
   const phi = (90 - lat) * (Math.PI / 180);
   const theta = (lon + 180) * (Math.PI / 180);
@@ -137,171 +115,228 @@ function latLonToVec3(lat, lon, radius = 1.005) {
   );
 }
 
-// Create a wave ring on the sphere surface
-class IdeaWave {
-  constructor(topic, delay) {
-    this.topic = topic;
-    this.origin = latLonToVec3(topic.lat, topic.lon);
-    this.color = new THREE.Color(topic.color);
-    this.maxRadius = 0.6 + Math.random() * 0.4;
-    this.speed = 0.15 + Math.random() * 0.1;
-    this.delay = delay;
-    this.time = -delay;
-    this.rings = [];
-    this.label = null;
-
-    this.createLabel();
-    this.spawnRing();
-  }
-
-  createLabel() {
-    const el = document.createElement('div');
-    el.className = 'wave-label';
-    el.textContent = this.topic.text;
-    el.style.color = this.topic.color;
-    el.style.opacity = '0';
-    document.getElementById('labels').appendChild(el);
-    this.label = el;
-  }
-
-  spawnRing() {
-    const ringPoints = 128;
-    const ringGeo = new THREE.BufferGeometry();
-    const positions = new Float32Array(ringPoints * 3);
-    ringGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-
-    const ringMat = new THREE.LineBasicMaterial({
-      color: this.color,
-      transparent: true,
-      opacity: 0.8,
-      linewidth: 1,
-    });
-
-    const ring = new THREE.LineLoop(ringGeo, ringMat);
-    scene.add(ring);
-
-    this.rings.push({ mesh: ring, progress: 0 });
-  }
-
-  updateRingGeometry(ring, radius) {
-    const positions = ring.mesh.geometry.attributes.position;
-    const count = positions.count;
-    const origin = this.origin.clone().normalize();
-
-    // Build orthonormal basis on the sphere at origin
-    const up = new THREE.Vector3(0, 1, 0);
-    if (Math.abs(origin.dot(up)) > 0.99) up.set(1, 0, 0);
-    const tangent1 = new THREE.Vector3().crossVectors(origin, up).normalize();
-    const tangent2 = new THREE.Vector3().crossVectors(origin, tangent1).normalize();
-
-    for (let i = 0; i < count; i++) {
-      const angle = (i / count) * Math.PI * 2;
-      // Point on a circle in tangent plane
-      const dir = new THREE.Vector3()
-        .addScaledVector(tangent1, Math.cos(angle))
-        .addScaledVector(tangent2, Math.sin(angle));
-
-      // Rotate from origin along great circle by `radius` radians
-      const point = origin.clone()
-        .multiplyScalar(Math.cos(radius))
-        .addScaledVector(dir, Math.sin(radius))
-        .normalize()
-        .multiplyScalar(1.006);
-
-      positions.setXYZ(i, point.x, point.y, point.z);
-    }
-    positions.needsUpdate = true;
-  }
-
-  update(dt) {
-    this.time += dt;
-    if (this.time < 0) {
-      if (this.label) this.label.style.opacity = '0';
-      return;
-    }
-
-    // Respawn cycle
-    const cycleDuration = this.maxRadius / this.speed + 1.5;
-    const cycleTime = this.time % cycleDuration;
-
-    for (const ring of this.rings) {
-      ring.progress = cycleTime * this.speed;
-      const r = ring.progress;
-
-      if (r < this.maxRadius) {
-        ring.mesh.visible = true;
-        this.updateRingGeometry(ring, r);
-        const fade = 1 - r / this.maxRadius;
-        ring.mesh.material.opacity = fade * 0.7;
-      } else {
-        ring.mesh.visible = false;
-      }
-    }
-
-    // Update label position
-    if (this.label) {
-      const screenPos = this.origin.clone().applyMatrix4(earth.matrixWorld);
-      screenPos.project(camera);
-      const x = (screenPos.x * 0.5 + 0.5) * innerWidth;
-      const y = (-screenPos.y * 0.5 + 0.5) * innerHeight;
-
-      // Check if on front side
-      const camDir = camera.position.clone().normalize();
-      const dotProduct = this.origin.clone().normalize().dot(camDir);
-
-      if (dotProduct > 0.05 && cycleTime < this.maxRadius / this.speed) {
-        this.label.style.opacity = String(Math.min(1, dotProduct * 2));
-        this.label.style.left = x + 'px';
-        this.label.style.top = (y - 18) + 'px';
-        this.label.style.fontSize = `${Math.max(10, Math.min(15, 12 + dotProduct * 6))}px`;
-      } else {
-        this.label.style.opacity = '0';
-      }
-    }
-  }
-
-  dispose() {
-    for (const ring of this.rings) {
-      scene.remove(ring.mesh);
-      ring.mesh.geometry.dispose();
-      ring.mesh.material.dispose();
-    }
-    if (this.label) this.label.remove();
-  }
+// Angular distance between two points on sphere (radians)
+function angularDist(a, b) {
+  return Math.acos(Math.min(1, Math.max(-1, a.clone().normalize().dot(b.clone().normalize()))));
 }
 
-// Create origin markers (glowing dots)
-const markerGeo = new THREE.SphereGeometry(0.012, 8, 8);
+// ── City nodes ───────────────────────────────────────────────────────
+const labelsContainer = document.getElementById('labels');
+const markerGeo = new THREE.SphereGeometry(0.006, 6, 6);
 
-const waves = IDEA_TOPICS.map((topic, i) => {
-  // Add a glowing dot at the origin
-  const markerMat = new THREE.MeshBasicMaterial({ color: topic.color });
-  const marker = new THREE.Mesh(markerGeo, markerMat);
-  const pos = latLonToVec3(topic.lat, topic.lon, 1.008);
-  marker.position.copy(pos);
-  earth.add(marker);
+const cityNodes = CITIES.map(city => {
+  const pos = latLonToVec3(city.lat, city.lon, 1.007);
 
-  // Add a point light for glow effect
-  const glow = new THREE.PointLight(topic.color, 0.3, 0.3);
-  glow.position.copy(pos);
-  earth.add(glow);
+  // Dot marker
+  const mat = new THREE.MeshBasicMaterial({ color: 0x88aacc, transparent: true, opacity: 0.6 });
+  const mesh = new THREE.Mesh(markerGeo, mat);
+  mesh.position.copy(pos);
+  earth.add(mesh);
 
-  return new IdeaWave(topic, i * 0.8);
+  // HTML label
+  const label = document.createElement('div');
+  label.className = 'wave-label';
+  label.textContent = city.name;
+  label.style.opacity = '0';
+  labelsContainer.appendChild(label);
+
+  return {
+    name: city.name,
+    pos,
+    mesh,
+    mat,
+    label,
+    baseColor: new THREE.Color(0x88aacc),
+    activeColor: null,    // color when infected
+    infectTime: -1,       // when this node was infected
+    glowIntensity: 0,     // current glow level 0-1
+    activeTopicText: null, // which topic infected it
+  };
 });
+
+// Pre-compute neighbors for each city (sorted by distance)
+const MAX_INFECT_DIST = 0.45; // radians (~25° arc, ~2800km)
+for (const node of cityNodes) {
+  node.neighbors = cityNodes
+    .filter(n => n !== node)
+    .map(n => ({ node: n, dist: angularDist(node.pos, n.pos) }))
+    .filter(n => n.dist < MAX_INFECT_DIST)
+    .sort((a, b) => a.dist - b.dist);
+}
+
+// ── Wave rings (pooled for performance) ──────────────────────────────
+const RING_POINTS = 96;
+const MAX_RINGS = 60;
+const ringPool = [];
+
+function createRing() {
+  const geo = new THREE.BufferGeometry();
+  const positions = new Float32Array(RING_POINTS * 3);
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  const mat = new THREE.LineBasicMaterial({
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0,
+    linewidth: 1,
+    blending: THREE.AdditiveBlending,
+  });
+  const mesh = new THREE.LineLoop(geo, mat);
+  mesh.visible = false;
+  scene.add(mesh);
+  return { mesh, mat, geo, active: false, origin: null, radius: 0, maxRadius: 0, color: null };
+}
+
+for (let i = 0; i < MAX_RINGS; i++) ringPool.push(createRing());
+
+function spawnRing(origin, color, maxRadius) {
+  const ring = ringPool.find(r => !r.active);
+  if (!ring) return null;
+  ring.active = true;
+  ring.origin = origin.clone().normalize();
+  ring.radius = 0;
+  ring.maxRadius = maxRadius;
+  ring.color = color.clone();
+  ring.mat.color.copy(color);
+  ring.mesh.visible = true;
+  return ring;
+}
+
+function updateRingGeometry(ring) {
+  const positions = ring.geo.attributes.position;
+  const origin = ring.origin;
+  const radius = ring.radius;
+
+  const up = new THREE.Vector3(0, 1, 0);
+  if (Math.abs(origin.dot(up)) > 0.99) up.set(1, 0, 0);
+  const t1 = new THREE.Vector3().crossVectors(origin, up).normalize();
+  const t2 = new THREE.Vector3().crossVectors(origin, t1).normalize();
+
+  for (let i = 0; i < RING_POINTS; i++) {
+    const angle = (i / RING_POINTS) * Math.PI * 2;
+    const dir = new THREE.Vector3()
+      .addScaledVector(t1, Math.cos(angle))
+      .addScaledVector(t2, Math.sin(angle));
+    const point = origin.clone()
+      .multiplyScalar(Math.cos(radius))
+      .addScaledVector(dir, Math.sin(radius))
+      .normalize()
+      .multiplyScalar(1.008);
+    positions.setXYZ(i, point.x, point.y, point.z);
+  }
+  positions.needsUpdate = true;
+}
+
+// ── Wave propagation system ──────────────────────────────────────────
+const WAVE_SPEED = 0.18;        // radians per second
+const INFECT_COOLDOWN = 8;      // seconds before a node can be re-infected
+const GLOW_DURATION = 4;        // seconds a node glows after infection
+const WAVE_INTERVAL = 3;        // seconds between new topic waves
+
+let totalTime = 0;
+let nextWaveTime = 1;
+
+function infectNode(node, color, topicText) {
+  node.infectTime = totalTime;
+  node.activeColor = color.clone();
+  node.activeTopicText = topicText;
+  node.glowIntensity = 1;
+
+  // Spawn expanding ring from this node
+  spawnRing(node.pos, color, MAX_INFECT_DIST * 1.2);
+}
+
+function startNewWave() {
+  const topic = TOPICS[Math.floor(Math.random() * TOPICS.length)];
+  const startNode = cityNodes[Math.floor(Math.random() * cityNodes.length)];
+  const color = new THREE.Color(topic.color);
+  infectNode(startNode, color, topic.text);
+}
 
 // ── Animate ──────────────────────────────────────────────────────────
 const clock = new THREE.Clock();
+const tmpVec = new THREE.Vector3();
 
 function animate() {
   requestAnimationFrame(animate);
-  const dt = clock.getDelta();
+  const dt = Math.min(clock.getDelta(), 0.05);
+  totalTime += dt;
 
   controls.update();
   earth.rotation.y += 0.0005;
   clouds.rotation.y += 0.0007;
 
-  for (const wave of waves) {
-    wave.update(dt);
+  // Spawn new topic waves periodically
+  if (totalTime > nextWaveTime) {
+    startNewWave();
+    nextWaveTime = totalTime + WAVE_INTERVAL + Math.random() * 2;
+  }
+
+  // Update wave rings and check infections
+  for (const ring of ringPool) {
+    if (!ring.active) continue;
+    ring.radius += WAVE_SPEED * dt;
+    const fade = 1 - ring.radius / ring.maxRadius;
+
+    if (ring.radius >= ring.maxRadius || fade <= 0) {
+      ring.active = false;
+      ring.mesh.visible = false;
+      continue;
+    }
+
+    ring.mat.opacity = fade * 0.6;
+    updateRingGeometry(ring);
+
+    // Check if ring passes through any city node → infect it
+    for (const node of cityNodes) {
+      if (node.infectTime > 0 && totalTime - node.infectTime < INFECT_COOLDOWN) continue;
+      const dist = angularDist(ring.origin, node.pos);
+      // Ring is at radius ± tolerance
+      if (Math.abs(dist - ring.radius) < 0.03) {
+        infectNode(node, ring.color, ring._topicText || '');
+      }
+    }
+  }
+
+  // Update city node visuals
+  const camWorldPos = camera.position.clone();
+  // Account for earth rotation by transforming camera pos into earth's local space
+  const earthInverse = earth.matrixWorld.clone().invert();
+  const camLocal = camWorldPos.applyMatrix4(earthInverse).normalize();
+
+  for (const node of cityNodes) {
+    const timeSinceInfect = totalTime - node.infectTime;
+
+    // Glow decay
+    if (node.infectTime > 0 && timeSinceInfect < GLOW_DURATION) {
+      const pulse = 0.5 + 0.5 * Math.sin(totalTime * 6);
+      node.glowIntensity = (1 - timeSinceInfect / GLOW_DURATION) * (0.7 + 0.3 * pulse);
+      const c = node.baseColor.clone().lerp(node.activeColor, node.glowIntensity);
+      node.mat.color.copy(c);
+      node.mat.opacity = 0.6 + node.glowIntensity * 0.4;
+      node.mesh.scale.setScalar(1 + node.glowIntensity * 3);
+    } else {
+      node.glowIntensity = 0;
+      node.mat.color.copy(node.baseColor);
+      node.mat.opacity = 0.5;
+      node.mesh.scale.setScalar(1);
+    }
+
+    // Label visibility (only front-facing, only when glowing)
+    const dot = node.pos.clone().normalize().dot(camLocal);
+    if (dot > 0.15 && node.glowIntensity > 0.2) {
+      tmpVec.copy(node.pos).applyMatrix4(earth.matrixWorld).project(camera);
+      const sx = (tmpVec.x * 0.5 + 0.5) * innerWidth;
+      const sy = (-tmpVec.y * 0.5 + 0.5) * innerHeight;
+      node.label.style.left = sx + 'px';
+      node.label.style.top = (sy - 14) + 'px';
+      node.label.style.opacity = String(Math.min(1, dot * node.glowIntensity * 2));
+      node.label.style.color = node.activeColor ? '#' + node.activeColor.getHexString() : '#88aacc';
+      node.label.textContent = node.activeTopicText
+        ? `${node.name} — ${node.activeTopicText}`
+        : node.name;
+    } else {
+      node.label.style.opacity = '0';
+    }
   }
 
   renderer.render(scene, camera);
