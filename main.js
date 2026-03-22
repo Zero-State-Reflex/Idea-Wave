@@ -1,10 +1,27 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-// ── 10 major city nodes ──────────────────────────────────────────────
+// ── City nodes ───────────────────────────────────────────────────────
 const NODES = [
+  // Origin
   { name: 'Los Angeles', lat: 34.05, lon: -118.25 },
-  { name: 'New York', lat: 40.7, lon: -74.0 },
+
+  // Major US cities (wave hits these first as it spreads from LA)
+  { name: 'San Francisco', lat: 37.77, lon: -122.42 },
+  { name: 'Las Vegas', lat: 36.17, lon: -115.14 },
+  { name: 'Phoenix', lat: 33.45, lon: -112.07 },
+  { name: 'Denver', lat: 39.74, lon: -104.99 },
+  { name: 'Dallas', lat: 32.78, lon: -96.80 },
+  { name: 'Houston', lat: 29.76, lon: -95.37 },
+  { name: 'Chicago', lat: 41.88, lon: -87.63 },
+  { name: 'Atlanta', lat: 33.75, lon: -84.39 },
+  { name: 'Miami', lat: 25.76, lon: -80.19 },
+  { name: 'Washington D.C.', lat: 38.91, lon: -77.04 },
+  { name: 'New York', lat: 40.71, lon: -74.01 },
+  { name: 'Boston', lat: 42.36, lon: -71.06 },
+  { name: 'Seattle', lat: 47.61, lon: -122.33 },
+
+  // International
   { name: 'London', lat: 51.5, lon: -0.1 },
   { name: 'Paris', lat: 48.9, lon: 2.3 },
   { name: 'Tokyo', lat: 35.7, lon: 139.7 },
