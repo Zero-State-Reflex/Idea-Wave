@@ -232,7 +232,7 @@ function updateWaveGeo(radius) {
   const positions = waveGeo.attributes.position;
   const alphas = waveGeo.attributes.rowAlpha;
   const { o, t1, t2 } = tangentBasis(originPos);
-  const bandWidth = 0.02 + (radius / Math.PI) * 0.10;
+  const bandWidth = radius * 0.06;
 
   for (let row = 0; row < BAND_ROWS; row++) {
     const rowT = row / (BAND_ROWS - 1);
