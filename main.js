@@ -162,17 +162,65 @@ const cityNodes = CITIES.map(city => {
   };
 });
 
-// ── Wave ring pool ───────────────────────────────────────────────────
-const RING_PTS = 96, MAX_RINGS = 120;
+// ── Wave band pool (wide glowing rings with blur/fade) ───────────────
+const RING_PTS = 96;
+const BAND_ROWS = 6;           // multiple concentric rings = width
+const MAX_RINGS = 80;
 const ringPool = [];
 
+// Shader for soft glowing wave bands
+const waveBandVert = `
+  attribute float rowAlpha;
+  varying float vAlpha;
+  void main() {
+    vAlpha = rowAlpha;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+const waveBandFrag = `
+  uniform vec3 uColor;
+  uniform float uOpacity;
+  varying float vAlpha;
+  void main() {
+    float a = vAlpha * uOpacity;
+    gl_FragColor = vec4(uColor, a);
+  }
+`;
+
 function createRing() {
+  const vertCount = RING_PTS * BAND_ROWS;
   const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(RING_PTS * 3), 3));
-  const mat = new THREE.LineBasicMaterial({
-    color: 0xffffff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending,
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vertCount * 3), 3));
+  geo.setAttribute('rowAlpha', new THREE.BufferAttribute(new Float32Array(vertCount), 1));
+
+  // Build index: triangle strip rows
+  const indices = [];
+  for (let row = 0; row < BAND_ROWS - 1; row++) {
+    for (let i = 0; i < RING_PTS; i++) {
+      const cur = row * RING_PTS + i;
+      const next = row * RING_PTS + (i + 1) % RING_PTS;
+      const curUp = (row + 1) * RING_PTS + i;
+      const nextUp = (row + 1) * RING_PTS + (i + 1) % RING_PTS;
+      indices.push(cur, next, curUp);
+      indices.push(next, nextUp, curUp);
+    }
+  }
+  geo.setIndex(indices);
+
+  const mat = new THREE.ShaderMaterial({
+    vertexShader: waveBandVert,
+    fragmentShader: waveBandFrag,
+    uniforms: {
+      uColor: { value: new THREE.Color(1, 1, 1) },
+      uOpacity: { value: 0 },
+    },
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    side: THREE.DoubleSide,
   });
-  const mesh = new THREE.LineLoop(geo, mat);
+
+  const mesh = new THREE.Mesh(geo, mat);
   mesh.visible = false;
   scene.add(mesh);
   return { mesh, mat, geo, active: false, origin: null, radius: 0, maxRadius: 0, color: null, topicText: '' };
@@ -187,42 +235,63 @@ function spawnRing(origin, color, maxRadius, topicText) {
   ring.radius = 0;
   ring.maxRadius = maxRadius;
   ring.color = color.clone();
-  ring.mat.color.copy(color);
+  ring.mat.uniforms.uColor.value.copy(color);
   ring.mesh.visible = true;
   ring.topicText = topicText;
   return ring;
 }
 
 function updateRingGeo(ring) {
-  const pos = ring.geo.attributes.position;
+  const positions = ring.geo.attributes.position;
+  const alphas = ring.geo.attributes.rowAlpha;
   const o = ring.origin, r = ring.radius;
+
+  // Band width grows as wave expands (blur effect)
+  const progress = r / ring.maxRadius;
+  const bandWidth = 0.02 + progress * 0.08; // starts thin, gets wider/blurrier
+
   const up = new THREE.Vector3(0, 1, 0);
   if (Math.abs(o.dot(up)) > 0.99) up.set(1, 0, 0);
   const t1 = new THREE.Vector3().crossVectors(o, up).normalize();
   const t2 = new THREE.Vector3().crossVectors(o, t1).normalize();
-  for (let i = 0; i < RING_PTS; i++) {
-    const a = (i / RING_PTS) * Math.PI * 2;
-    const d = new THREE.Vector3().addScaledVector(t1, Math.cos(a)).addScaledVector(t2, Math.sin(a));
-    const p = o.clone().multiplyScalar(Math.cos(r)).addScaledVector(d, Math.sin(r)).normalize().multiplyScalar(1.008);
-    pos.setXYZ(i, p.x, p.y, p.z);
+
+  for (let row = 0; row < BAND_ROWS; row++) {
+    // Spread rows across the band width, centered on the ring radius
+    const rowT = row / (BAND_ROWS - 1);           // 0..1
+    const rowOffset = (rowT - 0.5) * bandWidth;    // offset from center
+    const rowR = Math.max(0.001, r + rowOffset);
+
+    // Alpha: gaussian-ish falloff from center row
+    const distFromCenter = Math.abs(rowT - 0.5) * 2; // 0 at center, 1 at edge
+    const rowAlpha = Math.exp(-distFromCenter * distFromCenter * 3);
+
+    for (let i = 0; i < RING_PTS; i++) {
+      const a = (i / RING_PTS) * Math.PI * 2;
+      const d = new THREE.Vector3().addScaledVector(t1, Math.cos(a)).addScaledVector(t2, Math.sin(a));
+      const p = o.clone().multiplyScalar(Math.cos(rowR)).addScaledVector(d, Math.sin(rowR)).normalize().multiplyScalar(1.008);
+      const idx = row * RING_PTS + i;
+      positions.setXYZ(idx, p.x, p.y, p.z);
+      alphas.setX(idx, rowAlpha);
+    }
   }
-  pos.needsUpdate = true;
+  positions.needsUpdate = true;
+  alphas.needsUpdate = true;
 }
 
 // ── Wave system ──────────────────────────────────────────────────────
 // Each idea fires ONE wave. When it hits a capital, that capital fires
 // its own wave. Waves only come from idea nodes or infected capitals.
 
-const WAVE_SPEED = 0.22;
-const INFECT_COOLDOWN = 10;  // per-topic cooldown per city
-const GLOW_DURATION = 5;
-const CITY_WAVE_RADIUS = 0.5;   // how far a capital's secondary wave reaches
+const WAVE_SPEED = 0.08;          // much slower
+const INFECT_COOLDOWN = 15;       // per-topic cooldown per city
+const GLOW_DURATION = 6;
+const CITY_WAVE_RADIUS = 0.5;    // how far a capital's secondary wave reaches
 const IDEA_WAVE_RADIUS = Math.PI; // idea waves spread across entire globe
 
 let totalTime = 0;
 let currentIdeaIndex = 0;
 let nextIdeaFireTime = 2;
-const IDEA_FIRE_INTERVAL = 12; // seconds between each idea firing
+const IDEA_FIRE_INTERVAL = 20; // longer interval since waves are slower
 
 // Track per-city per-topic cooldowns
 const cityTopicLastInfect = new Map(); // "cityIdx-topicText" → time
@@ -285,15 +354,18 @@ function animate() {
   for (const ring of ringPool) {
     if (!ring.active) continue;
     ring.radius += WAVE_SPEED * dt;
-    const fade = 1 - ring.radius / ring.maxRadius;
+    const progress = ring.radius / ring.maxRadius;
 
-    if (ring.radius >= ring.maxRadius || fade <= 0) {
+    if (progress >= 1) {
       ring.active = false;
       ring.mesh.visible = false;
       continue;
     }
 
-    ring.mat.opacity = Math.min(fade * 0.7, 0.6);
+    // Smooth fade: ramp up quickly, then long gradual fadeout
+    const fadeIn = Math.min(1, progress * 8);
+    const fadeOut = Math.pow(1 - progress, 1.5);
+    ring.mat.uniforms.uOpacity.value = fadeIn * fadeOut * 0.65;
     updateRingGeo(ring);
 
     // Check if wave hits any capital city
