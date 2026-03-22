@@ -330,15 +330,14 @@ function animate() {
 
     const g = city.glow;
 
-    // Core sphere
+    // Core sphere — fixed size, only color changes
     city.coreMat.color.copy(dimColor.clone().lerp(ideaColor, city.isOrigin ? 1 : g));
     city.coreMat.opacity = 0.6 + g * 0.4;
-    city.core.scale.setScalar(1 + g * 2.5);
 
-    // Glow sprite
+    // Glow sprite — pulse the glow aura only
     city.spriteMat.color.copy(dimColor.clone().lerp(ideaColor, city.isOrigin ? 1 : Math.max(g, 0.05)));
     city.spriteMat.opacity = city.isOrigin ? 0.5 + g * 0.3 : g * 0.7;
-    city.sprite.scale.setScalar(city.isOrigin ? 0.12 + g * 0.04 : 0.06 + g * 0.10);
+    city.sprite.scale.setScalar(city.isOrigin ? 0.12 + g * 0.04 : 0.08 + g * 0.08);
 
     // Point light
     city.light.color.copy(g > 0.1 ? ideaColor : dimColor);
