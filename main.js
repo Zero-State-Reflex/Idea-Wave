@@ -177,12 +177,30 @@ const cityNodes = NODES.map((city, i) => {
   label.style.fontWeight = isOrigin ? '700' : '500';
   labelsContainer.appendChild(label);
 
+  // 3 pulse rings that expand from city center on infection
+  const PULSE_RING_PTS = 64;
+  const pulseRings = [];
+  for (let r = 0; r < 3; r++) {
+    const rGeo = new THREE.BufferGeometry();
+    rGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(PULSE_RING_PTS * 3), 3));
+    const rMat = new THREE.LineBasicMaterial({
+      color: ideaColor, transparent: true, opacity: 0,
+      blending: THREE.AdditiveBlending,
+    });
+    const rMesh = new THREE.LineLoop(rGeo, rMat);
+    rMesh.visible = false;
+    scene.add(rMesh);
+    pulseRings.push({ geo: rGeo, mat: rMat, mesh: rMesh, radius: 0 });
+  }
+
   return {
     name: city.name, pos, core, coreMat, sprite, spriteMat, light, label,
     isOrigin,
     distFromOrigin: angularDist(originPos, pos),
     infectTime: isOrigin ? 0 : -1,
     glow: isOrigin ? 1 : 0,
+    pulseRings,
+    pulseFired: false,
   };
 });
 
@@ -260,6 +278,23 @@ floatingLabel.style.fontSize = '12px';
 floatingLabel.style.fontWeight = '600';
 labelsContainer.appendChild(floatingLabel);
 
+// ── Pulse ring helpers ───────────────────────────────────────────────
+const PULSE_RING_PTS = 64;
+const PULSE_MAX_RADIUS = 0.08;  // small local rings around city
+const PULSE_SPEED = 0.06;
+const PULSE_STAGGER = 0.4;      // seconds between each of the 3 rings
+
+function updatePulseRingGeo(geo, origin, radius) {
+  const positions = geo.attributes.position;
+  const { o, t1, t2 } = tangentBasis(origin);
+  for (let i = 0; i < PULSE_RING_PTS; i++) {
+    const a = (i / PULSE_RING_PTS) * Math.PI * 2;
+    const p = pointOnSphere(o, t1, t2, a, radius);
+    positions.setXYZ(i, p.x, p.y, p.z);
+  }
+  positions.needsUpdate = true;
+}
+
 // ── Animate ──────────────────────────────────────────────────────────
 const WAVE_SPEED = 0.04;
 const GLOW_FADE = 6; // seconds for a city glow to fade after wave passes
@@ -312,6 +347,7 @@ function animate() {
     // Check if wave has reached this city
     if (!city.isOrigin && city.infectTime < 0 && waveRadius >= city.distFromOrigin) {
       city.infectTime = totalTime;
+      city.pulseFired = true;
     }
 
     // Compute glow intensity
@@ -342,6 +378,28 @@ function animate() {
     // Point light
     city.light.color.copy(g > 0.1 ? ideaColor : dimColor);
     city.light.intensity = city.isOrigin ? 0.4 + g * 0.3 : g * 0.8;
+
+    // Pulse rings — 3 staggered expanding rings from city center
+    if (city.pulseFired && city.infectTime > 0) {
+      const timeSince = totalTime - city.infectTime;
+      for (let r = 0; r < 3; r++) {
+        const ring = city.pulseRings[r];
+        const ringTime = timeSince - r * PULSE_STAGGER;
+        if (ringTime < 0) {
+          ring.mesh.visible = false;
+          continue;
+        }
+        const ringRadius = ringTime * PULSE_SPEED;
+        if (ringRadius > PULSE_MAX_RADIUS) {
+          ring.mesh.visible = false;
+          continue;
+        }
+        ring.mesh.visible = true;
+        const progress = ringRadius / PULSE_MAX_RADIUS;
+        ring.mat.opacity = (1 - progress) * 0.8;
+        updatePulseRingGeo(ring.geo, city.pos, Math.max(0.001, ringRadius));
+      }
+    }
 
     // Label
     if (dot > 0.1 && (city.isOrigin || g > 0.1)) {
