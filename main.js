@@ -224,37 +224,47 @@ const waveBandFrag = `
   }
 `;
 
-const waveGeo = new THREE.BufferGeometry();
-const vc = RING_PTS * BAND_ROWS;
-waveGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vc * 3), 3));
-waveGeo.setAttribute('rowAlpha', new THREE.BufferAttribute(new Float32Array(vc), 1));
-const idx = [];
-for (let row = 0; row < BAND_ROWS - 1; row++) {
-  for (let i = 0; i < RING_PTS; i++) {
-    const c = row * RING_PTS + i, n = row * RING_PTS + (i+1)%RING_PTS;
-    const cu = (row+1)*RING_PTS + i, nu = (row+1)*RING_PTS + (i+1)%RING_PTS;
-    idx.push(c,n,cu, n,nu,cu);
+// 5 wave bands: leading wave + 4 trailing waves that fade
+const NUM_WAVES = 5;
+const WAVE_STAGGER = 1.5; // seconds between each wave launch
+
+function createWaveBand() {
+  const geo = new THREE.BufferGeometry();
+  const vc = RING_PTS * BAND_ROWS;
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vc * 3), 3));
+  geo.setAttribute('rowAlpha', new THREE.BufferAttribute(new Float32Array(vc), 1));
+  const idx = [];
+  for (let row = 0; row < BAND_ROWS - 1; row++) {
+    for (let i = 0; i < RING_PTS; i++) {
+      const c = row * RING_PTS + i, n = row * RING_PTS + (i+1)%RING_PTS;
+      const cu = (row+1)*RING_PTS + i, nu = (row+1)*RING_PTS + (i+1)%RING_PTS;
+      idx.push(c,n,cu, n,nu,cu);
+    }
   }
+  geo.setIndex(idx);
+  const mat = new THREE.ShaderMaterial({
+    vertexShader: waveBandVert, fragmentShader: waveBandFrag,
+    uniforms: { uColor: { value: ideaColor.clone() }, uOpacity: { value: 0 } },
+    transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.visible = false;
+  earth.add(mesh);
+  return { geo, mat, mesh, radius: 0, active: false };
 }
-waveGeo.setIndex(idx);
 
-const waveMat = new THREE.ShaderMaterial({
-  vertexShader: waveBandVert, fragmentShader: waveBandFrag,
-  uniforms: { uColor: { value: ideaColor.clone() }, uOpacity: { value: 0.5 } },
-  transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
-});
-const waveMesh = new THREE.Mesh(waveGeo, waveMat);
-earth.add(waveMesh);
+const waveBands = [];
+for (let i = 0; i < NUM_WAVES; i++) waveBands.push(createWaveBand());
 
-function updateWaveGeo(radius) {
-  const positions = waveGeo.attributes.position;
-  const alphas = waveGeo.attributes.rowAlpha;
+function updateWaveBandGeo(band) {
+  const positions = band.geo.attributes.position;
+  const alphas = band.geo.attributes.rowAlpha;
   const { o, t1, t2 } = tangentBasis(originPos);
-  const bandWidth = radius * 0.06;
+  const bandWidth = band.radius * 0.06;
 
   for (let row = 0; row < BAND_ROWS; row++) {
     const rowT = row / (BAND_ROWS - 1);
-    const rowR = Math.max(0.001, radius + (rowT - 0.5) * bandWidth);
+    const rowR = Math.max(0.001, band.radius + (rowT - 0.5) * bandWidth);
     const d = Math.abs(rowT - 0.5) * 2;
     const rowAlpha = Math.exp(-d * d * 3);
     for (let i = 0; i < RING_PTS; i++) {
@@ -297,10 +307,11 @@ function updatePulseRingGeo(geo, origin, radius) {
 
 // ── Animate ──────────────────────────────────────────────────────────
 const WAVE_SPEED = 0.04;
-const GLOW_FADE = 6; // seconds for a city glow to fade after wave passes
-let waveRadius = 0;
+const GLOW_FADE = 6;
 let totalTime = 0;
 const WAVE_START = 2;
+// Leading wave radius (wave 0) — used for city infection checks
+let leadWaveRadius = 0;
 const clock = new THREE.Clock();
 const tmpVec = new THREE.Vector3();
 
@@ -316,17 +327,44 @@ function animate() {
   const earthInv = earth.matrixWorld.clone().invert();
   const camLocal = camera.position.clone().applyMatrix4(earthInv).normalize();
 
-  // ── Wave expansion ──
-  if (totalTime >= WAVE_START && waveRadius < Math.PI) {
-    waveRadius += WAVE_SPEED * dt;
-    waveMesh.visible = true;
-    updateWaveGeo(waveRadius);
+  // ── Update 5 wave bands ──
+  for (let wi = 0; wi < NUM_WAVES; wi++) {
+    const band = waveBands[wi];
+    const bandStart = WAVE_START + wi * WAVE_STAGGER;
 
-    // Floating label at wave front
+    if (totalTime < bandStart) continue;
+
+    if (!band.active) {
+      band.active = true;
+      band.radius = 0;
+      band.mesh.visible = true;
+    }
+
+    band.radius += WAVE_SPEED * dt;
+
+    if (band.radius >= Math.PI) {
+      band.mesh.visible = false;
+      continue;
+    }
+
+    // Trailing waves fade more — wave 0 is full opacity, wave 4 is faintest
+    const baseFade = 1 - wi * 0.18; // 1.0, 0.82, 0.64, 0.46, 0.28
+    const progress = band.radius / Math.PI;
+    const fadeOut = Math.pow(1 - progress, 1.5);
+    band.mat.uniforms.uOpacity.value = baseFade * fadeOut * 0.55;
+
+    updateWaveBandGeo(band);
+
+    // Track leading wave for city infection
+    if (wi === 0) leadWaveRadius = band.radius;
+  }
+
+  // Floating label follows leading wave front
+  if (waveBands[0].active && waveBands[0].radius < Math.PI) {
     const { o, t1, t2 } = tangentBasis(originPos);
     let bestDot = -Infinity, bestPt = null;
     for (let i = 0; i < 32; i++) {
-      const pt = pointOnSphere(o, t1, t2, (i/32)*Math.PI*2, waveRadius);
+      const pt = pointOnSphere(o, t1, t2, (i/32)*Math.PI*2, waveBands[0].radius);
       const d = pt.clone().normalize().dot(camLocal);
       if (d > bestDot) { bestDot = d; bestPt = pt; }
     }
@@ -338,14 +376,16 @@ function animate() {
     } else {
       floatingLabel.style.opacity = '0';
     }
+  } else {
+    floatingLabel.style.opacity = '0';
   }
 
   // ── Update each city node ──
   for (const city of cityNodes) {
     const dot = city.pos.clone().normalize().dot(camLocal);
 
-    // Check if wave has reached this city
-    if (!city.isOrigin && city.infectTime < 0 && waveRadius >= city.distFromOrigin) {
+    // Check if leading wave has reached this city
+    if (!city.isOrigin && city.infectTime < 0 && leadWaveRadius >= city.distFromOrigin) {
       city.infectTime = totalTime;
       city.pulseFired = true;
     }
