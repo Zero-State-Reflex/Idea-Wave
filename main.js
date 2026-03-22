@@ -189,7 +189,7 @@ const cityNodes = NODES.map((city, i) => {
     });
     const rMesh = new THREE.LineLoop(rGeo, rMat);
     rMesh.visible = false;
-    scene.add(rMesh);
+    earth.add(rMesh);
     pulseRings.push({ geo: rGeo, mat: rMat, mesh: rMesh, radius: 0 });
   }
 
@@ -244,7 +244,7 @@ const waveMat = new THREE.ShaderMaterial({
   transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
 });
 const waveMesh = new THREE.Mesh(waveGeo, waveMat);
-scene.add(waveMesh);
+earth.add(waveMesh);
 
 function updateWaveGeo(radius) {
   const positions = waveGeo.attributes.position;
