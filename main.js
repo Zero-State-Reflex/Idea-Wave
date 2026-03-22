@@ -262,7 +262,7 @@ labelsContainer.appendChild(floatingLabel);
 
 // ── Animate ──────────────────────────────────────────────────────────
 const WAVE_SPEED = 0.04;
-const GLOW_FADE = 3; // seconds for a city glow to fade after wave passes
+const GLOW_FADE = 6; // seconds for a city glow to fade after wave passes
 let waveRadius = 0;
 let totalTime = 0;
 const WAVE_START = 2;
@@ -336,12 +336,12 @@ function animate() {
 
     // Glow sprite — pulse the glow aura only
     city.spriteMat.color.copy(dimColor.clone().lerp(ideaColor, city.isOrigin ? 1 : Math.max(g, 0.05)));
-    city.spriteMat.opacity = city.isOrigin ? 0.5 + g * 0.3 : g * 0.7;
-    city.sprite.scale.setScalar(city.isOrigin ? 0.12 + g * 0.04 : 0.08 + g * 0.08);
+    city.spriteMat.opacity = city.isOrigin ? 0.5 + g * 0.3 : g * 0.9;
+    city.sprite.scale.setScalar(city.isOrigin ? 0.12 + g * 0.04 : 0.08 + g * 0.14);
 
     // Point light
     city.light.color.copy(g > 0.1 ? ideaColor : dimColor);
-    city.light.intensity = city.isOrigin ? 0.4 + g * 0.3 : g * 0.5;
+    city.light.intensity = city.isOrigin ? 0.4 + g * 0.3 : g * 0.8;
 
     // Label
     if (dot > 0.1 && (city.isOrigin || g > 0.1)) {
