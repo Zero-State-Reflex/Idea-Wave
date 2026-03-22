@@ -32,113 +32,44 @@ const sunLight = new THREE.DirectionalLight(0xffffff, 2.0);
 sunLight.position.set(5, 3, 5);
 scene.add(sunLight);
 
-// ── Earth texture (procedural) ───────────────────────────────────────
-function createEarthTexture() {
-  const w = 2048, h = 1024;
-  const cv = document.createElement('canvas');
-  cv.width = w; cv.height = h;
-  const cx = cv.getContext('2d');
-
-  // Ocean gradient
-  const grad = cx.createLinearGradient(0, 0, 0, h);
-  grad.addColorStop(0, '#1a3a5c');
-  grad.addColorStop(0.3, '#0d4f8b');
-  grad.addColorStop(0.5, '#0b6aad');
-  grad.addColorStop(0.7, '#0d4f8b');
-  grad.addColorStop(1, '#1a3a5c');
-  cx.fillStyle = grad;
-  cx.fillRect(0, 0, w, h);
-
-  // Simplified continent outlines (lon/lat → pixel)
-  function ll2px(lon, lat) {
-    return [(lon + 180) / 360 * w, (90 - lat) / 180 * h];
-  }
-  function drawLand(coords, color) {
-    cx.fillStyle = color;
-    cx.beginPath();
-    const [sx, sy] = ll2px(coords[0][0], coords[0][1]);
-    cx.moveTo(sx, sy);
-    for (let i = 1; i < coords.length; i++) {
-      const [px, py] = ll2px(coords[i][0], coords[i][1]);
-      cx.lineTo(px, py);
-    }
-    cx.closePath();
-    cx.fill();
-  }
-
-  const land = '#2d5a27';
-  const landLight = '#3a6b33';
-  const desert = '#8a7d50';
-  const ice = '#d8e8e8';
-
-  // North America
-  drawLand([[-130,55],[-125,50],[-124,42],[-117,33],[-105,25],[-97,20],[-90,22],[-82,25],
-    [-80,30],[-75,35],[-70,42],[-67,45],[-65,48],[-60,47],[-55,50],[-60,55],[-65,60],
-    [-75,62],[-85,65],[-95,68],[-105,70],[-120,72],[-135,70],[-140,65],[-145,62],[-140,58]], land);
-
-  // South America
-  drawLand([[-80,10],[-75,5],[-70,3],[-60,5],[-50,0],[-45,-5],[-40,-10],[-38,-15],
-    [-40,-22],[-45,-25],[-50,-30],[-55,-35],[-60,-40],[-65,-45],[-70,-50],[-75,-48],
-    [-72,-40],[-70,-30],[-75,-20],[-78,-10],[-80,-5],[-77,0],[-80,5]], landLight);
-
-  // Europe
-  drawLand([[-10,36],[-5,38],[0,40],[3,43],[5,44],[10,45],[15,45],[20,42],
-    [25,40],[28,42],[30,45],[28,50],[25,52],[20,55],[15,57],[10,58],
-    [5,60],[10,63],[15,65],[20,68],[25,70],[20,72],[10,72],[5,65],
-    [0,60],[-5,55],[-8,50],[-5,45],[-8,40]], landLight);
-
-  // Africa
-  drawLand([[-15,15],[-17,12],[-15,8],[-8,5],[-5,5],[5,4],[10,2],[15,5],
-    [20,5],[30,8],[35,10],[40,12],[42,10],[50,12],[50,8],[45,0],
-    [42,-5],[40,-10],[38,-15],[35,-20],[32,-25],[28,-30],[25,-33],
-    [20,-35],[18,-30],[15,-25],[12,-18],[15,-10],[12,-5],[8,0],
-    [5,5],[0,5],[-5,5],[-10,8],[-15,10]], desert);
-
-  // Asia
-  drawLand([[28,42],[35,38],[40,38],[45,35],[50,30],[55,25],[60,25],[65,25],
-    [70,22],[75,20],[80,15],[82,18],[85,22],[88,22],[90,25],[95,20],
-    [100,15],[105,22],[110,20],[115,25],[120,30],[125,35],[130,40],
-    [135,45],[140,50],[142,55],[140,60],[135,65],[130,68],[120,70],
-    [110,72],[100,73],[90,72],[80,70],[70,68],[60,65],[50,60],
-    [45,55],[40,50],[35,48],[30,45]], land);
-
-  // Australia
-  drawLand([[115,-15],[120,-14],[125,-14],[130,-13],[135,-14],[140,-17],
-    [145,-18],[150,-22],[152,-25],[153,-28],[150,-33],[148,-37],
-    [142,-38],[138,-35],[135,-33],[130,-32],[125,-33],[120,-34],
-    [116,-35],[114,-33],[114,-28],[115,-22]], desert);
-
-  // Greenland
-  drawLand([[-55,60],[-45,60],[-38,65],[-25,70],[-18,75],[-20,80],
-    [-30,82],[-40,83],[-50,82],[-55,78],[-58,72],[-55,65]], ice);
-
-  // Antarctica
-  drawLand([[-180,-70],[-150,-72],[-120,-75],[-90,-78],[-60,-80],
-    [-30,-78],[0,-75],[30,-72],[60,-70],[90,-72],[120,-75],
-    [150,-78],[180,-75],[180,-90],[-180,-90]], ice);
-
-  // Add some noise/texture
-  const imgData = cx.getImageData(0, 0, w, h);
-  for (let i = 0; i < imgData.data.length; i += 4) {
-    const noise = (Math.random() - 0.5) * 12;
-    imgData.data[i] += noise;
-    imgData.data[i + 1] += noise;
-    imgData.data[i + 2] += noise;
-  }
-  cx.putImageData(imgData, 0, 0);
-
-  return new THREE.CanvasTexture(cv);
-}
+// ── Earth textures (NASA Blue Marble) ────────────────────────────────
+const loader = new THREE.TextureLoader();
+const earthDayMap = loader.load(
+  'https://unpkg.com/three-globe@2.35.0/example/img/earth-blue-marble.jpg'
+);
+const earthBumpMap = loader.load(
+  'https://unpkg.com/three-globe@2.35.0/example/img/earth-topology.png'
+);
+const earthSpecMap = loader.load(
+  'https://unpkg.com/three-globe@2.35.0/example/img/earth-water.png'
+);
 
 // ── Earth sphere ─────────────────────────────────────────────────────
-const earthGeo = new THREE.SphereGeometry(1, 64, 64);
+const earthGeo = new THREE.SphereGeometry(1, 96, 96);
 const earthMat = new THREE.MeshPhongMaterial({
-  map: createEarthTexture(),
-  specular: 0x222244,
-  shininess: 15,
+  map: earthDayMap,
+  bumpMap: earthBumpMap,
+  bumpScale: 0.03,
+  specularMap: earthSpecMap,
+  specular: 0x333333,
+  shininess: 25,
 });
 const earth = new THREE.Mesh(earthGeo, earthMat);
 scene.add(earth);
+
+// Cloud layer
+const cloudMap = loader.load(
+  'https://unpkg.com/three-globe@2.35.0/example/img/earth-clouds.png'
+);
+const cloudGeo = new THREE.SphereGeometry(1.01, 64, 64);
+const cloudMat = new THREE.MeshPhongMaterial({
+  map: cloudMap,
+  transparent: true,
+  opacity: 0.25,
+  depthWrite: false,
+});
+const clouds = new THREE.Mesh(cloudGeo, cloudMat);
+scene.add(clouds);
 
 // Atmosphere glow
 const atmosGeo = new THREE.SphereGeometry(1.02, 64, 64);
@@ -367,6 +298,7 @@ function animate() {
 
   controls.update();
   earth.rotation.y += 0.0005;
+  clouds.rotation.y += 0.0007;
 
   for (const wave of waves) {
     wave.update(dt);
