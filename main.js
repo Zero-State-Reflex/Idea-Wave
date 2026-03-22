@@ -115,25 +115,95 @@ function latLonToVec3(lat, lon, radius = 1.005) {
   );
 }
 
-// Angular distance between two points on sphere (radians)
 function angularDist(a, b) {
   return Math.acos(Math.min(1, Math.max(-1, a.clone().normalize().dot(b.clone().normalize()))));
 }
 
-// ── City nodes ───────────────────────────────────────────────────────
+// ── Glow sprite texture ─────────────────────────────────────────────
+function createGlowTexture() {
+  const size = 128;
+  const cv = document.createElement('canvas');
+  cv.width = size; cv.height = size;
+  const cx = cv.getContext('2d');
+  const grad = cx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.15, 'rgba(255,255,255,0.8)');
+  grad.addColorStop(0.4, 'rgba(255,255,255,0.3)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  cx.fillStyle = grad;
+  cx.fillRect(0, 0, size, size);
+  return new THREE.CanvasTexture(cv);
+}
+const glowTex = createGlowTexture();
+
+// ── Idea topic nodes (permanent, glowing) ────────────────────────────
 const labelsContainer = document.getElementById('labels');
-const markerGeo = new THREE.SphereGeometry(0.006, 6, 6);
+
+const ideaNodes = TOPICS.map((topic, i) => {
+  const pos = latLonToVec3(topic.lat, topic.lon, 1.008);
+  const color = new THREE.Color(topic.color);
+
+  // Core dot
+  const coreMat = new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 1 });
+  const coreMesh = new THREE.Mesh(new THREE.SphereGeometry(0.015, 12, 12), coreMat);
+  coreMesh.position.copy(pos);
+  earth.add(coreMesh);
+
+  // Glow sprite
+  const spriteMat = new THREE.SpriteMaterial({
+    map: glowTex,
+    color: color,
+    transparent: true,
+    opacity: 0.7,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  const sprite = new THREE.Sprite(spriteMat);
+  sprite.position.copy(pos);
+  sprite.scale.setScalar(0.12);
+  earth.add(sprite);
+
+  // Point light for local glow
+  const light = new THREE.PointLight(topic.color, 0.5, 0.4);
+  light.position.copy(pos);
+  earth.add(light);
+
+  // HTML label
+  const label = document.createElement('div');
+  label.className = 'wave-label';
+  label.textContent = topic.text;
+  label.style.color = topic.color;
+  label.style.opacity = '0';
+  label.style.fontSize = '13px';
+  label.style.fontWeight = '700';
+  labelsContainer.appendChild(label);
+
+  return {
+    topic,
+    pos,
+    color,
+    coreMesh,
+    coreMat,
+    sprite,
+    spriteMat,
+    light,
+    label,
+    // Wave timing: each idea pulses on its own schedule
+    waveInterval: 6 + Math.random() * 6,  // 6-12s between pulses
+    nextWaveTime: 1 + i * 0.7,            // staggered start
+  };
+});
+
+// ── City nodes (smaller, get infected by waves) ─────────────────────
+const cityMarkerGeo = new THREE.SphereGeometry(0.005, 6, 6);
 
 const cityNodes = CITIES.map(city => {
   const pos = latLonToVec3(city.lat, city.lon, 1.007);
-
-  // Dot marker
-  const mat = new THREE.MeshBasicMaterial({ color: 0x88aacc, transparent: true, opacity: 0.6 });
-  const mesh = new THREE.Mesh(markerGeo, mat);
+  const mat = new THREE.MeshBasicMaterial({ color: 0x556677, transparent: true, opacity: 0.4 });
+  const mesh = new THREE.Mesh(cityMarkerGeo, mat);
   mesh.position.copy(pos);
   earth.add(mesh);
 
-  // HTML label
   const label = document.createElement('div');
   label.className = 'wave-label';
   label.textContent = city.name;
@@ -146,27 +216,17 @@ const cityNodes = CITIES.map(city => {
     mesh,
     mat,
     label,
-    baseColor: new THREE.Color(0x88aacc),
-    activeColor: null,    // color when infected
-    infectTime: -1,       // when this node was infected
-    glowIntensity: 0,     // current glow level 0-1
-    activeTopicText: null, // which topic infected it
+    baseColor: new THREE.Color(0x556677),
+    activeColor: null,
+    infectTime: -1,
+    activeTopicText: null,
+    glowIntensity: 0,
   };
 });
 
-// Pre-compute neighbors for each city (sorted by distance)
-const MAX_INFECT_DIST = 0.45; // radians (~25° arc, ~2800km)
-for (const node of cityNodes) {
-  node.neighbors = cityNodes
-    .filter(n => n !== node)
-    .map(n => ({ node: n, dist: angularDist(node.pos, n.pos) }))
-    .filter(n => n.dist < MAX_INFECT_DIST)
-    .sort((a, b) => a.dist - b.dist);
-}
-
-// ── Wave rings (pooled for performance) ──────────────────────────────
+// ── Wave rings (pooled) ──────────────────────────────────────────────
 const RING_POINTS = 96;
-const MAX_RINGS = 60;
+const MAX_RINGS = 80;
 const ringPool = [];
 
 function createRing() {
@@ -183,12 +243,12 @@ function createRing() {
   const mesh = new THREE.LineLoop(geo, mat);
   mesh.visible = false;
   scene.add(mesh);
-  return { mesh, mat, geo, active: false, origin: null, radius: 0, maxRadius: 0, color: null };
+  return { mesh, mat, geo, active: false, origin: null, radius: 0, maxRadius: 0, color: null, topicText: '' };
 }
 
 for (let i = 0; i < MAX_RINGS; i++) ringPool.push(createRing());
 
-function spawnRing(origin, color, maxRadius) {
+function spawnRing(origin, color, maxRadius, topicText) {
   const ring = ringPool.find(r => !r.active);
   if (!ring) return null;
   ring.active = true;
@@ -198,6 +258,7 @@ function spawnRing(origin, color, maxRadius) {
   ring.color = color.clone();
   ring.mat.color.copy(color);
   ring.mesh.visible = true;
+  ring.topicText = topicText;
   return ring;
 }
 
@@ -226,30 +287,22 @@ function updateRingGeometry(ring) {
   positions.needsUpdate = true;
 }
 
-// ── Wave propagation system ──────────────────────────────────────────
-const WAVE_SPEED = 0.18;        // radians per second
-const INFECT_COOLDOWN = 8;      // seconds before a node can be re-infected
-const GLOW_DURATION = 4;        // seconds a node glows after infection
-const WAVE_INTERVAL = 3;        // seconds between new topic waves
+// ── Wave propagation ─────────────────────────────────────────────────
+const WAVE_SPEED = 0.2;
+const INFECT_COOLDOWN = 6;
+const GLOW_DURATION = 5;
+const MAX_WAVE_RADIUS = 0.55; // ~30° arc
 
 let totalTime = 0;
-let nextWaveTime = 1;
 
-function infectNode(node, color, topicText) {
+function infectCity(node, color, topicText) {
   node.infectTime = totalTime;
   node.activeColor = color.clone();
   node.activeTopicText = topicText;
   node.glowIntensity = 1;
 
-  // Spawn expanding ring from this node
-  spawnRing(node.pos, color, MAX_INFECT_DIST * 1.2);
-}
-
-function startNewWave() {
-  const topic = TOPICS[Math.floor(Math.random() * TOPICS.length)];
-  const startNode = cityNodes[Math.floor(Math.random() * cityNodes.length)];
-  const color = new THREE.Color(topic.color);
-  infectNode(startNode, color, topic.text);
+  // Infected cities also emit a smaller secondary wave
+  spawnRing(node.pos, color, MAX_WAVE_RADIUS * 0.6, topicText);
 }
 
 // ── Animate ──────────────────────────────────────────────────────────
@@ -265,13 +318,40 @@ function animate() {
   earth.rotation.y += 0.0005;
   clouds.rotation.y += 0.0007;
 
-  // Spawn new topic waves periodically
-  if (totalTime > nextWaveTime) {
-    startNewWave();
-    nextWaveTime = totalTime + WAVE_INTERVAL + Math.random() * 2;
+  // Camera in earth-local space (for front-face checks)
+  const earthInverse = earth.matrixWorld.clone().invert();
+  const camLocal = camera.position.clone().applyMatrix4(earthInverse).normalize();
+
+  // ── Update idea nodes: pulse glow + emit waves ──
+  for (const idea of ideaNodes) {
+    // Pulsing glow
+    const pulse = 0.7 + 0.3 * Math.sin(totalTime * 3 + idea.topic.lat);
+    idea.spriteMat.opacity = 0.5 * pulse;
+    idea.sprite.scale.setScalar(0.10 + 0.04 * pulse);
+    idea.light.intensity = 0.3 + 0.3 * pulse;
+    idea.coreMesh.scale.setScalar(0.8 + 0.4 * pulse);
+
+    // Emit wave on schedule
+    if (totalTime >= idea.nextWaveTime) {
+      spawnRing(idea.pos, idea.color, MAX_WAVE_RADIUS, idea.topic.text);
+      idea.nextWaveTime = totalTime + idea.waveInterval + Math.random() * 2;
+    }
+
+    // Label (always visible when front-facing)
+    const dot = idea.pos.clone().normalize().dot(camLocal);
+    if (dot > 0.1) {
+      tmpVec.copy(idea.pos).applyMatrix4(earth.matrixWorld).project(camera);
+      const sx = (tmpVec.x * 0.5 + 0.5) * innerWidth;
+      const sy = (-tmpVec.y * 0.5 + 0.5) * innerHeight;
+      idea.label.style.left = sx + 'px';
+      idea.label.style.top = (sy - 20) + 'px';
+      idea.label.style.opacity = String(Math.min(0.95, dot * 1.5));
+    } else {
+      idea.label.style.opacity = '0';
+    }
   }
 
-  // Update wave rings and check infections
+  // ── Update wave rings + infect cities ──
   for (const ring of ringPool) {
     if (!ring.active) continue;
     ring.radius += WAVE_SPEED * dt;
@@ -286,56 +366,50 @@ function animate() {
     ring.mat.opacity = fade * 0.6;
     updateRingGeometry(ring);
 
-    // Check if ring passes through any city node → infect it
-    for (const node of cityNodes) {
-      if (node.infectTime > 0 && totalTime - node.infectTime < INFECT_COOLDOWN) continue;
-      const dist = angularDist(ring.origin, node.pos);
-      // Ring is at radius ± tolerance
-      if (Math.abs(dist - ring.radius) < 0.03) {
-        infectNode(node, ring.color, ring._topicText || '');
+    // Infect city nodes the wave passes through
+    for (const city of cityNodes) {
+      if (city.infectTime > 0 && totalTime - city.infectTime < INFECT_COOLDOWN) continue;
+      const dist = angularDist(ring.origin, city.pos);
+      if (Math.abs(dist - ring.radius) < 0.025) {
+        infectCity(city, ring.color, ring.topicText);
       }
     }
   }
 
-  // Update city node visuals
-  const camWorldPos = camera.position.clone();
-  // Account for earth rotation by transforming camera pos into earth's local space
-  const earthInverse = earth.matrixWorld.clone().invert();
-  const camLocal = camWorldPos.applyMatrix4(earthInverse).normalize();
+  // ── Update city node visuals ──
+  for (const city of cityNodes) {
+    const timeSinceInfect = totalTime - city.infectTime;
 
-  for (const node of cityNodes) {
-    const timeSinceInfect = totalTime - node.infectTime;
-
-    // Glow decay
-    if (node.infectTime > 0 && timeSinceInfect < GLOW_DURATION) {
-      const pulse = 0.5 + 0.5 * Math.sin(totalTime * 6);
-      node.glowIntensity = (1 - timeSinceInfect / GLOW_DURATION) * (0.7 + 0.3 * pulse);
-      const c = node.baseColor.clone().lerp(node.activeColor, node.glowIntensity);
-      node.mat.color.copy(c);
-      node.mat.opacity = 0.6 + node.glowIntensity * 0.4;
-      node.mesh.scale.setScalar(1 + node.glowIntensity * 3);
+    if (city.infectTime > 0 && timeSinceInfect < GLOW_DURATION) {
+      const pulse = 0.5 + 0.5 * Math.sin(totalTime * 5);
+      city.glowIntensity = (1 - timeSinceInfect / GLOW_DURATION) * (0.6 + 0.4 * pulse);
+      city.mat.color.copy(city.baseColor.clone().lerp(city.activeColor, city.glowIntensity));
+      city.mat.opacity = 0.4 + city.glowIntensity * 0.6;
+      city.mesh.scale.setScalar(1 + city.glowIntensity * 4);
     } else {
-      node.glowIntensity = 0;
-      node.mat.color.copy(node.baseColor);
-      node.mat.opacity = 0.5;
-      node.mesh.scale.setScalar(1);
+      city.glowIntensity = 0;
+      city.mat.color.copy(city.baseColor);
+      city.mat.opacity = 0.4;
+      city.mesh.scale.setScalar(1);
     }
 
-    // Label visibility (only front-facing, only when glowing)
-    const dot = node.pos.clone().normalize().dot(camLocal);
-    if (dot > 0.15 && node.glowIntensity > 0.2) {
-      tmpVec.copy(node.pos).applyMatrix4(earth.matrixWorld).project(camera);
+    // City label (only when glowing + front-facing)
+    const dot = city.pos.clone().normalize().dot(camLocal);
+    if (dot > 0.15 && city.glowIntensity > 0.3) {
+      tmpVec.copy(city.pos).applyMatrix4(earth.matrixWorld).project(camera);
       const sx = (tmpVec.x * 0.5 + 0.5) * innerWidth;
       const sy = (-tmpVec.y * 0.5 + 0.5) * innerHeight;
-      node.label.style.left = sx + 'px';
-      node.label.style.top = (sy - 14) + 'px';
-      node.label.style.opacity = String(Math.min(1, dot * node.glowIntensity * 2));
-      node.label.style.color = node.activeColor ? '#' + node.activeColor.getHexString() : '#88aacc';
-      node.label.textContent = node.activeTopicText
-        ? `${node.name} — ${node.activeTopicText}`
-        : node.name;
+      city.label.style.left = sx + 'px';
+      city.label.style.top = (sy - 12) + 'px';
+      city.label.style.opacity = String(Math.min(0.9, dot * city.glowIntensity * 2));
+      city.label.style.color = city.activeColor ? '#' + city.activeColor.getHexString() : '#88aacc';
+      city.label.textContent = city.activeTopicText
+        ? `${city.name} — ${city.activeTopicText}`
+        : city.name;
+      city.label.style.fontSize = '10px';
+      city.label.style.fontWeight = '400';
     } else {
-      node.label.style.opacity = '0';
+      city.label.style.opacity = '0';
     }
   }
 
