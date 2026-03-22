@@ -1,0 +1,9 @@
+{
+  "name": "idea-globe",
+  "version": "1.0.0",
+  "description": "Interactive idea globe visualization",
+  "main": "main.js",
+  "scripts": {
+    "dev": "npx serve ."
+  }
+}
