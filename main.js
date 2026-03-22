@@ -260,7 +260,7 @@ function updateWaveGeo(geo, origin, radius, maxRadius) {
 
 // ── One wave per idea node ───────────────────────────────────────────
 const WAVE_SPEED = 0.04;          // very slow dispersion
-const WAVE_MAX_RADIUS = Math.PI;  // full globe
+const WAVE_MAX_RADIUS = 1.2;     // fades out well before covering full globe
 const GLOW_DURATION = 6;
 const INFECT_COOLDOWN = 20;
 const cityTopicLastInfect = new Map();
@@ -356,16 +356,16 @@ function animate() {
       wave.active = false;
       wave.mesh.visible = false;
       wave.floatingLabel.style.opacity = '0';
-      // Restart after a long pause
-      wave.startTime = totalTime + 30 + Math.random() * 20;
+      // Restart after a pause
+      wave.startTime = totalTime + 15 + Math.random() * 10;
       wave.fired = false;
       continue;
     }
 
-    // Opacity: fade in quickly, then very slow gradual dispersal
+    // Opacity: fade in quickly, then steep fadeout
     const fadeIn = Math.min(1, progress * 10);
-    const fadeOut = Math.pow(1 - progress, 0.8);
-    wave.mat.uniforms.uOpacity.value = fadeIn * fadeOut * 0.55;
+    const fadeOut = Math.pow(1 - progress, 2.5);
+    wave.mat.uniforms.uOpacity.value = fadeIn * fadeOut * 0.5;
 
     updateWaveGeo(wave.geo, wave.idea.pos, wave.radius, WAVE_MAX_RADIUS);
 
