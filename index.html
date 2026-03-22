@@ -118,15 +118,16 @@
       max-width: none;
     }
 
-    /* Hidden SC iframe — must not use display:none or browser won't load it */
+    /* SC iframe: offscreen but large enough for the widget to initialize */
     #sc-player {
       position: absolute;
-      width: 1px;
-      height: 1px;
-      left: -100px;
-      top: -100px;
+      width: 300px;
+      height: 166px;
+      left: -9999px;
+      top: -9999px;
       opacity: 0;
       pointer-events: none;
+      border: none;
     }
   </style>
 </head>
@@ -137,7 +138,7 @@
   <!-- SoundCloud widget (hidden) -->
   <iframe id="sc-player"
     allow="autoplay"
-    src="https://w.soundcloud.com/player/?url=https%3A%2F%2Fsoundcloud.com%2Fiandothers%2Fthe-human-condition&auto_play=false&show_artwork=false&visual=false">
+    src="https://w.soundcloud.com/player/?url=https%3A%2F%2Fsoundcloud.com%2Fiandothers%2Fthe-human-condition&auto_play=false&buying=false&sharing=false&download=false&show_artwork=true&show_playcount=false&show_user=false&color=%23ff5500">
   </iframe>
 
   <!-- Audio controls -->
