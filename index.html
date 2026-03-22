@@ -103,8 +103,16 @@
       text-overflow: ellipsis;
     }
 
-    /* Hidden SC iframe */
-    #sc-player { display: none; }
+    /* Hidden SC iframe — must not use display:none or browser won't load it */
+    #sc-player {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      left: -100px;
+      top: -100px;
+      opacity: 0;
+      pointer-events: none;
+    }
   </style>
 </head>
 <body>
@@ -134,41 +142,58 @@
 
   <script src="https://w.soundcloud.com/player/api.js"></script>
   <script>
-    // SoundCloud Widget API control
-    const widget = SC.Widget('sc-player');
-    const speakerBtn = document.getElementById('speaker-btn');
-    const iconMuted = document.getElementById('icon-muted');
-    const iconPlaying = document.getElementById('icon-playing');
-    const volumeSlider = document.getElementById('volume-slider');
-    let isPlaying = false;
+    (function() {
+      const iframe = document.getElementById('sc-player');
+      const speakerBtn = document.getElementById('speaker-btn');
+      const iconMuted = document.getElementById('icon-muted');
+      const iconPlaying = document.getElementById('icon-playing');
+      const volumeSlider = document.getElementById('volume-slider');
+      let widget = null;
+      let isReady = false;
+      let isPlaying = false;
 
-    widget.bind(SC.Widget.Events.READY, () => {
-      widget.setVolume(parseInt(volumeSlider.value));
-    });
+      // Wait for iframe to load, then bind widget
+      iframe.addEventListener('load', () => {
+        widget = SC.Widget(iframe);
 
-    speakerBtn.addEventListener('click', () => {
-      if (isPlaying) {
-        widget.pause();
-        isPlaying = false;
-        iconMuted.style.display = '';
-        iconPlaying.style.display = 'none';
-      } else {
-        widget.play();
-        isPlaying = true;
-        iconMuted.style.display = 'none';
-        iconPlaying.style.display = '';
-      }
-    });
+        widget.bind(SC.Widget.Events.READY, () => {
+          isReady = true;
+          widget.setVolume(parseInt(volumeSlider.value));
+        });
 
-    volumeSlider.addEventListener('input', () => {
-      widget.setVolume(parseInt(volumeSlider.value));
-    });
+        widget.bind(SC.Widget.Events.PLAY, () => {
+          isPlaying = true;
+          iconMuted.style.display = 'none';
+          iconPlaying.style.display = '';
+        });
 
-    widget.bind(SC.Widget.Events.FINISH, () => {
-      // Loop the track
-      widget.seekTo(0);
-      widget.play();
-    });
+        widget.bind(SC.Widget.Events.PAUSE, () => {
+          isPlaying = false;
+          iconMuted.style.display = '';
+          iconPlaying.style.display = 'none';
+        });
+
+        widget.bind(SC.Widget.Events.FINISH, () => {
+          widget.seekTo(0);
+          widget.play();
+        });
+      });
+
+      speakerBtn.addEventListener('click', () => {
+        if (!widget || !isReady) return;
+        if (isPlaying) {
+          widget.pause();
+        } else {
+          widget.play();
+        }
+      });
+
+      volumeSlider.addEventListener('input', () => {
+        if (widget && isReady) {
+          widget.setVolume(parseInt(volumeSlider.value));
+        }
+      });
+    })();
   </script>
 
   <script type="importmap">
