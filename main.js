@@ -21,15 +21,76 @@ const NODES = [
   { name: 'Boston', lat: 42.36, lon: -71.06 },
   { name: 'Seattle', lat: 47.61, lon: -122.33 },
 
-  // International
-  { name: 'London', lat: 51.5, lon: -0.1 },
-  { name: 'Paris', lat: 48.9, lon: 2.3 },
-  { name: 'Tokyo', lat: 35.7, lon: 139.7 },
-  { name: 'Dubai', lat: 25.2, lon: 55.3 },
-  { name: 'São Paulo', lat: -23.6, lon: -46.6 },
-  { name: 'Sydney', lat: -33.9, lon: 151.2 },
-  { name: 'Lagos', lat: 6.5, lon: 3.4 },
-  { name: 'Mumbai', lat: 19.1, lon: 72.9 },
+  // Canada
+  { name: 'Vancouver', lat: 49.28, lon: -123.12 },
+  { name: 'Toronto', lat: 43.65, lon: -79.38 },
+  { name: 'Montreal', lat: 45.50, lon: -73.57 },
+
+  // Mexico & Central America
+  { name: 'Mexico City', lat: 19.43, lon: -99.13 },
+  { name: 'Guadalajara', lat: 20.67, lon: -103.35 },
+  { name: 'Panama City', lat: 9.0, lon: -79.5 },
+
+  // South America
+  { name: 'Bogotá', lat: 4.71, lon: -74.07 },
+  { name: 'Lima', lat: -12.05, lon: -77.04 },
+  { name: 'São Paulo', lat: -23.55, lon: -46.63 },
+  { name: 'Rio de Janeiro', lat: -22.91, lon: -43.17 },
+  { name: 'Buenos Aires', lat: -34.60, lon: -58.38 },
+  { name: 'Santiago', lat: -33.45, lon: -70.67 },
+
+  // Europe
+  { name: 'London', lat: 51.51, lon: -0.13 },
+  { name: 'Paris', lat: 48.86, lon: 2.35 },
+  { name: 'Berlin', lat: 52.52, lon: 13.41 },
+  { name: 'Madrid', lat: 40.42, lon: -3.70 },
+  { name: 'Rome', lat: 41.90, lon: 12.50 },
+  { name: 'Amsterdam', lat: 52.37, lon: 4.90 },
+  { name: 'Stockholm', lat: 59.33, lon: 18.07 },
+  { name: 'Moscow', lat: 55.76, lon: 37.62 },
+  { name: 'Istanbul', lat: 41.01, lon: 28.98 },
+
+  // Africa
+  { name: 'Lagos', lat: 6.52, lon: 3.38 },
+  { name: 'Cairo', lat: 30.04, lon: 31.24 },
+  { name: 'Nairobi', lat: -1.29, lon: 36.82 },
+  { name: 'Johannesburg', lat: -26.20, lon: 28.04 },
+  { name: 'Cape Town', lat: -33.93, lon: 18.42 },
+  { name: 'Casablanca', lat: 33.57, lon: -7.59 },
+
+  // Middle East
+  { name: 'Dubai', lat: 25.20, lon: 55.27 },
+  { name: 'Riyadh', lat: 24.69, lon: 46.72 },
+  { name: 'Tel Aviv', lat: 32.09, lon: 34.78 },
+  { name: 'Tehran', lat: 35.69, lon: 51.39 },
+
+  // South Asia
+  { name: 'Mumbai', lat: 19.08, lon: 72.88 },
+  { name: 'New Delhi', lat: 28.61, lon: 77.21 },
+  { name: 'Bangalore', lat: 12.97, lon: 77.59 },
+  { name: 'Karachi', lat: 24.86, lon: 67.01 },
+  { name: 'Dhaka', lat: 23.81, lon: 90.41 },
+
+  // East & Southeast Asia
+  { name: 'Beijing', lat: 39.90, lon: 116.41 },
+  { name: 'Shanghai', lat: 31.23, lon: 121.47 },
+  { name: 'Tokyo', lat: 35.68, lon: 139.69 },
+  { name: 'Seoul', lat: 37.57, lon: 126.98 },
+  { name: 'Hong Kong', lat: 22.32, lon: 114.17 },
+  { name: 'Singapore', lat: 1.35, lon: 103.82 },
+  { name: 'Bangkok', lat: 13.76, lon: 100.50 },
+  { name: 'Jakarta', lat: -6.21, lon: 106.85 },
+  { name: 'Manila', lat: 14.60, lon: 120.98 },
+  { name: 'Hanoi', lat: 21.03, lon: 105.85 },
+
+  // Oceania
+  { name: 'Sydney', lat: -33.87, lon: 151.21 },
+  { name: 'Melbourne', lat: -37.81, lon: 144.96 },
+  { name: 'Auckland', lat: -36.85, lon: 174.76 },
+
+  // Hawaii & Pacific
+  { name: 'Honolulu', lat: 21.31, lon: -157.86 },
+  { name: 'Anchorage', lat: 61.22, lon: -149.90 },
 ];
 
 const IDEA = { text: 'Heatwave', color: '#c4723a' };
